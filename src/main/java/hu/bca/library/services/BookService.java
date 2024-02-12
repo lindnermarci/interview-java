@@ -8,4 +8,6 @@ public interface BookService {
     Book addAuthor(Long bookId, Long authorId);
 
     Collection<Book> updateAllWithPublishYear();
+
+    Collection<Book> getAllBooksFromCountryPublishedLaterThan(String countryCode, Integer from);
 }

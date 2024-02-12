@@ -9,20 +9,15 @@ import hu.bca.library.repositories.AuthorRepository;
 import hu.bca.library.repositories.BookRepository;
 import hu.bca.library.services.BookService;
 import lombok.extern.log4j.Log4j2;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.Collection;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 @Service
@@ -33,14 +28,30 @@ public class BookServiceImpl implements BookService {
 
     private final BookRepository bookRepository;
     private final AuthorRepository authorRepository;
-    private final OpenLibraryClient openLibraryClient;
     private final OpenLibraryClientAsync openLibraryClientAsync;
 
-    public BookServiceImpl(BookRepository bookRepository, AuthorRepository authorRepository, OpenLibraryClient openLibraryClient, OpenLibraryClientAsync openLibraryClientAsync) {
+    public BookServiceImpl(BookRepository bookRepository, AuthorRepository authorRepository, OpenLibraryClientAsync openLibraryClientAsync) {
         this.bookRepository = bookRepository;
         this.authorRepository = authorRepository;
-        this.openLibraryClient = openLibraryClient;
         this.openLibraryClientAsync = openLibraryClientAsync;
+    }
+
+    @Override
+    public List<Book> getAllBooksFromCountryPublishedLaterThan(final String countryCode, final Integer from) {
+        if (Objects.isNull(from)) {
+            var booksByAuthorCountry = bookRepository.findAllByCountry(countryCode);
+            booksByAuthorCountry.sort(getBookComparatorByYear());
+            return booksByAuthorCountry;
+        }
+        return bookRepository.findAllByCountry(countryCode).stream()
+          .filter(b -> Objects.nonNull(b.getYear()) && b.getYear() >= from)
+          .sorted(getBookComparatorByYear())
+          .toList();
+    }
+
+    private static Comparator<Book> getBookComparatorByYear() {
+        return Comparator.comparing(Book::getYear,
+          Comparator.nullsLast(Comparator.naturalOrder()));
     }
 
     @Override

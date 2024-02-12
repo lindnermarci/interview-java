@@ -19,12 +19,17 @@ public class BookController {
 
     @ResponseStatus(HttpStatus.CREATED)
 
-    @RequestMapping(value = "/{bookId}/add_author/{authorId}", method = RequestMethod.POST)
+    @GetMapping(value = "query/{countryCode}")
+    @ResponseBody Collection<Book> getAllBooksFromCountry(@PathVariable String countryCode, @RequestParam(required = false) Integer from) {
+        return this.bookService.getAllBooksFromCountryPublishedLaterThan(countryCode, from);
+    }
+
+    @PostMapping(value = "/{bookId}/add_author/{authorId}")
     @ResponseBody Book addAuthor(@PathVariable Long bookId, @PathVariable Long authorId) {
         return this.bookService.addAuthor(bookId, authorId);
     }
 
-    @RequestMapping(value = "/update-all-with-year", method = RequestMethod.PATCH)
+    @PatchMapping(value = "/update-all-with-year")
     @ResponseBody Collection<Book> updateAllWithYear() {
         return this.bookService.updateAllWithPublishYear();
     }
