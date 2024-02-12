@@ -26,6 +26,6 @@ public class BookController {
 
     @RequestMapping(value = "/update-all-with-year", method = RequestMethod.PATCH)
     @ResponseBody Collection<Book> updateAllWithYear() {
-        return this.bookService.updateAllWithYear();
+        return this.bookService.updateAllWithPublishYear();
     }
 }
