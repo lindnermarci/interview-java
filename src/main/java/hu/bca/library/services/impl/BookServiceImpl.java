@@ -1,8 +1,10 @@
 package hu.bca.library.services.impl;
 
 import hu.bca.library.feign.OpenLibraryClient;
+import hu.bca.library.feign.OpenLibraryClientAsync;
 import hu.bca.library.models.Author;
 import hu.bca.library.models.Book;
+import hu.bca.library.models.BookWithPublishDate;
 import hu.bca.library.repositories.AuthorRepository;
 import hu.bca.library.repositories.BookRepository;
 import hu.bca.library.services.BookService;
@@ -11,12 +13,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 @Service
 public class BookServiceImpl implements BookService {
@@ -26,11 +30,13 @@ public class BookServiceImpl implements BookService {
     private final BookRepository bookRepository;
     private final AuthorRepository authorRepository;
     private final OpenLibraryClient openLibraryClient;
+    private final OpenLibraryClientAsync openLibraryClientAsync;
 
-    public BookServiceImpl(BookRepository bookRepository, AuthorRepository authorRepository, OpenLibraryClient openLibraryClient) {
+    public BookServiceImpl(BookRepository bookRepository, AuthorRepository authorRepository, OpenLibraryClient openLibraryClient, OpenLibraryClientAsync openLibraryClientAsync) {
         this.bookRepository = bookRepository;
         this.authorRepository = authorRepository;
         this.openLibraryClient = openLibraryClient;
+        this.openLibraryClientAsync = openLibraryClientAsync;
     }
 
     @Override
@@ -51,25 +57,31 @@ public class BookServiceImpl implements BookService {
         return this.bookRepository.save(book.get());
     }
 
-    private record BookYear(Book book, Integer year){};
 
     @Override
     public Collection<Book> updateAllWithYear() {
         Iterable<Book> books = bookRepository.findAll();
-        for (Book book : books) {
-            var publishDateWrapper = openLibraryClient.getFirstPublishDate(book.getWorkId());
-            if (!StringUtils.hasLength(publishDateWrapper.getFirstPublishDate())) {
-                continue;
-            }
-            Matcher matcher = pattern.matcher(publishDateWrapper.getFirstPublishDate());
-            if (matcher.find()) {
-                var year = matcher.group();
-                book.setYear(Integer.valueOf(year));
-            }
+        List<Book> booksToSave = StreamSupport.stream(books.spliterator(), false)
+          .parallel()
+          .map(openLibraryClientAsync::getBookWithFirstPublishDateAsync)
+          .map(CompletableFuture::join)
+          .map(this::getBookWithPublishedYear)
+          .collect(Collectors.toList());
+
+        Iterable<Book> savedBooks = bookRepository.saveAll(booksToSave);
+        return StreamSupport.stream(savedBooks.spliterator(), false)
+          .toList();
+    }
+
+    private Book getBookWithPublishedYear(final BookWithPublishDate bookWithPublishDate) {
+        if (!StringUtils.hasLength(bookWithPublishDate.firstPublishDateWrapper().getFirstPublishDate())) {
+            return bookWithPublishDate.book();
         }
-        var iterable = bookRepository.saveAll(books);
-        var result = new ArrayList<Book>();
-        iterable.forEach(result::add);
-        return result;
+        Matcher matcher = pattern.matcher(bookWithPublishDate.firstPublishDateWrapper().getFirstPublishDate());
+        if (matcher.find()) {
+            var year = matcher.group();
+            bookWithPublishDate.book().setYear(Integer.valueOf(year));
+        }
+        return bookWithPublishDate.book();
     }
 }
